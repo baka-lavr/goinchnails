@@ -1,28 +1,35 @@
 package main
 
 import (
-	//"log"
+	"log"
 	"errors"
 	"reflect"
 	"strings"
 	"strconv"
+	"github.com/baka-lavr/goinchnails/src/database"
 	"github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
 type StateMachine struct {
-	db DataBase
+	db db.DataBase
 	user string
 	update UpdateData
 	state string
 	states map[string]State
 }
 
-func InitMachine(db DataBase) (StateMachine) {
+func InitMachine(db db.DataBase) (StateMachine) {
 	sm := StateMachine{
 		db: db,
 		states: map[string]State{
 			"Start": Start{},
 			"Client_Type": Client_Type{},
+			"Client_Master": Client_Master{},
+			"Client_Day": Client_Day{},
+			"Client_Time": Client_Time{},
+			"Client_Confirm": Client_Confirm{},
+			"Client_Check": Client_Check{},
+			"Client_Delete": Client_Delete{},
 		},
 	}
 	return sm
@@ -30,6 +37,7 @@ func InitMachine(db DataBase) (StateMachine) {
 func (sm *StateMachine) ChangeState(state string) {
 	sm.state = state
 	sm.db.SetState(sm.user, state)
+	log.Println(sm.state)
 }
 
 func (sm *StateMachine) ExecAction() (string, error) {
@@ -41,7 +49,7 @@ func (sm *StateMachine) ExecAction() (string, error) {
 			return text, errors.New("Message not found")
 		}
 		arg := sm.update.Message.Text
-		sm.states[sm.state].(Readable).Read(*sm, arg)
+		sm.states[sm.state].(Readable).Read(sm, arg)
 		//res = reflect.ValueOf(out)
 		return "", nil
 	} else {
@@ -84,17 +92,20 @@ func (sm *StateMachine) ExecAction() (string, error) {
 }
 func (sm *StateMachine) GenKeyboard(msg *tgbotapi.MessageConfig) {
 	var keyboard tgbotapi.InlineKeyboardMarkup
-	resp := sm.states[sm.state].Generate(*sm)
+	log.Println(sm.state)
+	resp := sm.states[sm.state].Generate(sm)
 	msg.Text = resp.text
 	if _,ok := sm.states[sm.state].(Readable); ok {
 		msg.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
 		return
 	}
 	var keys []tgbotapi.InlineKeyboardButton
-	for i,s := range resp.actions {
-		keys = append(keys,tgbotapi.NewInlineKeyboardButtonData(i, s))
+	for _,s := range resp.keys {
+		log.Println(s)
+		keys = append(keys,tgbotapi.NewInlineKeyboardButtonData(s, resp.actions[s]))
 	}
 	keyboard = tgbotapi.NewInlineKeyboardMarkup(tgbotapi.NewInlineKeyboardRow(keys...))
+	log.Println(keyboard)
 	msg.ReplyMarkup = &keyboard
 }
 
@@ -105,18 +116,16 @@ func (sm *StateMachine) Process(update UpdateData) tgbotapi.MessageConfig {
 	msg := tgbotapi.NewMessage(update.Chat,"Ошибка")
 
 	sm.state, err = sm.db.GetState(sm.user)
+	log.Println(sm.state)
 	if err != nil {
 		msg.Text = "Ошибка"
 	}
-	//_ = sm.Handle()
 	pretext, err := sm.ExecAction()
 	if err != nil {
 		msg.Text = "Ошибка"
 	}
-	//text := sm.Handle()
 
 	msg.Text = pretext + msg.Text
-	//log.Println(sm.actions)
 	sm.GenKeyboard(&msg)
 	return msg
 }

@@ -4,6 +4,7 @@ import (
 	"log"
 	"os"
 	"time"
+	"github.com/baka-lavr/goinchnails/src/database"
 	"github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
@@ -17,7 +18,7 @@ type UpdateData struct {
 
 
 func main() {
-	db := InitDB()
+	db := db.InitDB()
 	sm := InitMachine(db)
 	bot, err := tgbotapi.NewBotAPI(os.Getenv("BOT_TOKEN"))
 	if err != nil {
