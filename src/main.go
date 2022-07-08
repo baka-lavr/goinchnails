@@ -1,13 +1,15 @@
 package main
 
 import (
+	//"strconv"
 	"log"
 	"os"
+	"os/signal"
+	"context"
 	"time"
 	"github.com/baka-lavr/goinchnails/src/database"
 	"github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
-
 
 type UpdateData struct {
 	User int64
@@ -17,9 +19,16 @@ type UpdateData struct {
 }
 
 
-func main() {
-	db := db.InitDB()
-	sm := InitMachine(db)
+type Application struct {
+	bot *tgbotapi.BotAPI
+	sm StateMachine
+	db db.DataBase
+	updates tgbotapi.UpdatesChannel
+	notice chan db.Notifier
+}
+
+func InitApplication() Application {
+	database := db.InitDB()
 	bot, err := tgbotapi.NewBotAPI(os.Getenv("BOT_TOKEN"))
 	if err != nil {
 		log.Panic(err)
@@ -31,7 +40,18 @@ func main() {
 	time.Sleep(time.Second)
 	updates.Clear()
 
-	for update := range updates {
+	notice := make(chan db.Notifier)
+	sm := InitMachine(database, notice)
+
+	app := Application{bot,sm,database,updates,notice}
+
+	go app.UpdateHandle()
+	go app.NoticeHandler()
+	return app
+}
+
+func (app *Application) UpdateHandle() {
+	for update := range app.updates {
 		//user := update.Message.From.ID
 		data := UpdateData{}
 		if update.Message != nil {
@@ -44,23 +64,52 @@ func main() {
 			data.User = update.CallbackQuery.From.ID
 			data.Chat = update.CallbackQuery.Message.Chat.ID
 		}
-
-		if err != nil {
-			msg := tgbotapi.NewMessage(update.Message.Chat.ID,"Error")
-			if _, err := bot.Send(msg); err != nil {
-				log.Panic(err)
-			}
-		}
 		
-		msg := sm.Process(data)
-		if _, err := bot.Send(msg); err != nil {
-			log.Panic(err)
+		msg := app.sm.Process(data)
+		var res tgbotapi.Message
+		var err error
+
+		if !app.sm.edit {
+			res, err = app.bot.Send(msg)
+		} else {
+			keys,_ := msg.ReplyMarkup.(*tgbotapi.InlineKeyboardMarkup)
+			edit := tgbotapi.NewEditMessageTextAndMarkup(data.User,app.db.GetLastMessage(app.sm.user),msg.Text,*keys)
+			res, err = app.bot.Send(edit)
+		}
+		app.db.SetLastMessage(data.User, res.MessageID)
+		if err != nil {
+			log.Println(err)
 		}
 		if update.CallbackQuery != nil {
 			call := tgbotapi.NewCallback(data.Callback.ID, data.Callback.Data)
-			if _, err := bot.Request(call); err != nil {
+			if _, err := app.bot.Request(call); err != nil {
 				panic(err)
 			}
 		}
 	}
+}
+
+func (app *Application) NoticeHandler() {
+	for message := range app.notice {
+		msg := tgbotapi.NewMessage(message.User, message.Text)
+		if _, err := app.bot.Send(msg); err != nil {
+			log.Println(err)
+		}
+	}
+}
+
+func (app *Application) Close() {
+	//close(app.updates)
+	close(app.notice)
+}
+
+func main() {
+	app := InitApplication()
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, os.Interrupt)
+	<- sig
+	_, cancel := context.WithTimeout(context.Background(),time.Second*10)
+	defer cancel()
+	app.Close()
+	log.Println("Server stopped")
 }

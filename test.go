@@ -1,14 +1,16 @@
 package main
 
 import (
-	"log"
-	"time"
-	"encoding/base32"
+	//"log"
+	//"context"
+	//"time"
+	//"encoding/base32"
+	//"strconv"
 )
+type Govno interface {}
+type Foo struct {}
 
 func main() {
-	data, _ := time.Now().GobEncode()
-	id := base32.StdEncoding.EncodeToString(data)
-	log.Println(id)
+	f,_ := Foo{}.(*Govno)
 }
 

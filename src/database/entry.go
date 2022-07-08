@@ -2,6 +2,7 @@ package db
 
 import (
 	"encoding/base32"
+	"fmt"
 	//"reflect"
 	//"encoding/json"
 	"strconv"
@@ -19,6 +20,7 @@ type Entry struct {
 	Time int `redis:"time" structs:"time"`
 	Day string `redis:"day" structs:"day"`
 	Client string `redis:"client" structs:"client"`
+	Phone int `redis:"phone" structs:"phone"`
 }
 
 func (db DataBase) EntrySet(user, key, value string) error {
@@ -40,28 +42,28 @@ func (db DataBase) FormEntry(user string) Entry {
 	return entry
 }
 
-func (db DataBase) FinishEntry(user string) error {
+func (db DataBase) FinishEntry(user string) (*Notifier,error) {
 	ctx := context.Background()
 	free := db.MasterFree(user)
 	time := db.Client.HGet(ctx, "user:"+user, "time").Val()
 	for _,s := range free {
 		if s.ID == time {
 			entry := db.FormEntry(user)
-			err := db.CreateEntry(entry)
-			return err
+			id,err := db.CreateEntry(entry)
+			return id,err
 		}
 	}
-	return errors.New("Ошибка")
+	return nil,errors.New("Ошибка")
 }
 
-func (db DataBase) CreateEntry(entry Entry) error {
+func (db DataBase) CreateEntry(entry Entry) (*Notifier,error) {
 	ctx := context.Background()
 	data, _ := time.Now().GobEncode()
 	id := base32.StdEncoding.EncodeToString(data)
 	//base32.StdEncoding.Encode(id, data)
 	check := db.Client.HGet(ctx, "entry:"+id, "client").Val()
 	if check != "" {
-		return errors.New("Ошибка")
+		return nil,errors.New("Ошибка")
 	}
 	ctx = context.WithValue(ctx, "id", id)
 	ctx = context.WithValue(ctx, "struct", entry)
@@ -77,7 +79,9 @@ func (db DataBase) CreateEntry(entry Entry) error {
 		return err
 	})
 	log.Println(res)
-	return err
+	master,_ := strconv.ParseInt(entry.Master,10,0)
+	not := Notifier{master, fmt.Sprintf("К вам записались на %d в %s", entry.Time, entry.Day),}
+	return &not,err
 }
 
 func (db DataBase) DeleteEntry(entry string) error {
@@ -99,6 +103,14 @@ func (db DataBase) DeleteEntry(entry string) error {
 	return err
 }
 
+func (db DataBase) CleanEntries(master string) {
+	ctx := context.Background()
+	list := db.Client.SMembers(ctx, "master-entry:"+master).Val()
+	for _,s := range list {
+		_ = db.DeleteEntry(s)
+	}
+}
+
 func (db DataBase) GetEntry(entry string) Entry {
 	ctx := context.Background()
 	var value Entry
@@ -107,9 +119,13 @@ func (db DataBase) GetEntry(entry string) Entry {
 	return value
 }
 
-func (db DataBase) ListOfEntry(user, who string) []List {
+func (db DataBase) ListOfEntry(user string, who bool) []List {
 	ctx := context.Background()
-	all, _ := db.Client.SMembers(ctx,who+"-entry:"+user).Result()
+	line := "user"
+	if who {
+		user = "master"
+	}
+	all, _ := db.Client.SMembers(ctx,line+"-entry:"+user).Result()
 	var list []List
 	for _,s := range all {
 		entry := db.GetEntry(s)
@@ -118,6 +134,11 @@ func (db DataBase) ListOfEntry(user, who string) []List {
 		item.ID = s
 		item.Name = strconv.Itoa(entry.Time)+":00|"+entry.Day
 		item.Descr = strconv.Itoa(entry.Time)+":00|"+entry.Day+"\n"+master.Name+"\n"
+		if who {
+			item.Descr += strconv.Itoa(entry.Phone)+"\n"
+		} else {
+			item.Descr += strconv.Itoa(master.Phone)+"\n"
+		}
 		list = append(list,item)
 	}
 	return list

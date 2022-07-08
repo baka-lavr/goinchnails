@@ -8,17 +8,35 @@ import (
 
 type Start struct {}
 func (Start) Generate(sm *StateMachine) Respond {
+	res := NewRespond("Кто вы?")
+	res.AddAction("Клиент","SelectClient")
+	res.AddAction("Мастер","SelectMaster")
+	return res
+}
+func (Start) SelectClient(sm *StateMachine) {
+	sm.ChangeState("Client_Start")
+}
+func (Start) SelectMaster(sm *StateMachine) {
+	sm.ChangeState("Master_Start")
+}
+
+type Client_Start struct {}
+func (Client_Start) Generate(sm *StateMachine) Respond {
 	res := NewRespond("Выберите действие")
 	res.AddAction("Записаться","BeginningEntry")
 	res.AddAction("Мои записи","Checking")
+	res.AddAction("Сменить тип","Canceling")
 	return res
 }
-func (Start) BeginningEntry(sm *StateMachine) {
+func (Client_Start) BeginningEntry(sm *StateMachine) {
 	sm.ChangeState("Client_Type")
 }
 
-func (Start) Checking(sm *StateMachine) {
+func (Client_Start) Checking(sm *StateMachine) {
 	sm.ChangeState("Client_Check")
+}
+func (Client_Start) Canceling(sm *StateMachine) {
+	sm.ChangeState("Start")
 }
 
 type Client_Type struct {}
@@ -34,7 +52,7 @@ func (Client_Type) SelectingType(sm *StateMachine, tp string) {
 	sm.ChangeState("Client_Master")
 }
 func (Client_Type) Canceling(sm *StateMachine) {
-	sm.ChangeState("Start")
+	sm.ChangeState("Client_Start")
 }
 
 type Client_Master struct {}
@@ -50,7 +68,7 @@ func (Client_Master) SelectingMaster(sm *StateMachine, master string) {
 	sm.ChangeState("Client_Day")
 }
 func (Client_Master) Canceling(sm *StateMachine) {
-	sm.ChangeState("Start")
+	sm.ChangeState("Client_Start")
 }
 
 type Client_Day struct {}
@@ -66,7 +84,7 @@ func (Client_Day) SelectingDay(sm *StateMachine, day string) {
 	sm.ChangeState("Client_Time")
 }
 func (Client_Day) Canceling(sm *StateMachine) {
-	sm.ChangeState("Start")
+	sm.ChangeState("Client_Start")
 }
 
 type Client_Time struct {}
@@ -84,10 +102,22 @@ func (Client_Time) Generate(sm *StateMachine) Respond {
 }
 func (Client_Time) SelectingTime(sm *StateMachine, time string) {
 	sm.db.EntrySet(sm.user,"time",time)
-	sm.ChangeState("Client_Confirm")
+	sm.ChangeState("Client_Phone")
 }
 func (Client_Time) Canceling(sm *StateMachine) {
 	sm.ChangeState("Client_Day")
+}
+
+type Client_Phone struct {}
+func (Client_Phone) Generate(sm *StateMachine) Respond {
+	res := NewRespond("Введите свой номер телефона для связи \nФормат: +7(**********)")
+	//res.AddAction("","Read")
+	return res
+}
+func (Client_Phone) Contact(sm *StateMachine, text string) {
+	sm.db.EntrySet(sm.user, "phone", text)
+	sm.ChangeState("Client_Confirm")
+	//return ""
 }
 
 type Client_Confirm struct{}
@@ -101,21 +131,22 @@ func (Client_Confirm) Generate(sm *StateMachine) Respond {
 	return res
 }
 func (Client_Confirm) Confirmation(sm *StateMachine) string {
-	var text string
-	err := sm.db.FinishEntry(sm.user)
-	if err != nil {
-		text = "Возникла ошибка\n"
+	text := "Возникла ошибка\n"
+	inx,err := sm.db.FinishEntry(sm.user)
+	if err == nil {
+		text = ""
+		sm.notice<-*inx
 	}
-	sm.ChangeState("Start")
+	sm.ChangeState("Client_Start")
 	return text
 }
 func (Client_Confirm) Canceling(sm *StateMachine) {
-	sm.ChangeState("Start")
+	sm.ChangeState("Client_Start")
 }
 
 type Client_Check struct {}
 func (Client_Check) Generate(sm *StateMachine) Respond {
-	list := sm.db.ListOfEntry(sm.user, "user")
+	list := sm.db.ListOfEntry(sm.user, false)
 	if len(list) == 0 {
 		res := NewRespond("Записей нет")
 		res.AddAction("Назад", "Canceling")
@@ -130,12 +161,12 @@ func (Client_Check) ChooseDeletion(sm *StateMachine) {
 	sm.ChangeState("Client_Delete")
 }
 func (Client_Check) Canceling(sm *StateMachine) {
-	sm.ChangeState("Start")
+	sm.ChangeState("Client_Start")
 }
 
 type Client_Delete struct {}
 func (Client_Delete) Generate(sm *StateMachine) Respond {
-	list := sm.db.ListOfEntry(sm.user, "user")
+	list := sm.db.ListOfEntry(sm.user, false)
 	if len(list) == 0 {
 		res := NewRespond("Записей нет")
 		res.AddAction("Назад", "Canceling")
@@ -156,5 +187,5 @@ func (Client_Delete) Deletion(sm *StateMachine, entry string) string {
 	return text
 }
 func (Client_Delete) Canceling(sm *StateMachine) {
-	sm.ChangeState("Start")
+	sm.ChangeState("Client_Start")
 }
