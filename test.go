@@ -11,6 +11,11 @@ type Govno interface {}
 type Foo struct {}
 
 func main() {
-	f,_ := Foo{}.(*Govno)
+	ctx := context.Background()
+	db := InitDB()
+	list := db.Client.SMembers(ctx,"masters")
+	for _,s := range list {
+		db.DeleteMaster(list)
+	}
 }
 

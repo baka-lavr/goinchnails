@@ -105,6 +105,9 @@ func (app *Application) Close() {
 
 func main() {
 	app := InitApplication()
+
+	
+
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt)
 	<- sig

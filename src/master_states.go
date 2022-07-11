@@ -125,7 +125,7 @@ func (Master_Name) Generate(sm *StateMachine) Respond {
 	return res
 }
 func (Master_Name) Read(sm *StateMachine, text string) string {
-	if text == "" {
+	if !CheckText(text) {
 		return "Неверный текст"
 	}
 	sm.db.EntrySet(sm.user, "name", text)
@@ -140,7 +140,7 @@ func (Master_Forename) Generate(sm *StateMachine) Respond {
 	return res
 }
 func (Master_Forename) Read(sm *StateMachine, text string) string {
-	if text == "" {
+	if !CheckText(text) {
 		return "Неверный текст"
 	}
 	sm.db.EntrySet(sm.user, "forename", text)
@@ -172,9 +172,7 @@ func (Master_Address) Generate(sm *StateMachine) Respond {
 	return res
 }
 func (Master_Address) Read(sm *StateMachine, text string) string {
-	if text == "" {
-		return "Неверный текст"
-	}
+	
 	sm.db.EntrySet(sm.user, "address", text)
 	sm.ChangeState("Master_Confirm")
 	return ""
@@ -183,7 +181,7 @@ func (Master_Address) Read(sm *StateMachine, text string) string {
 type Master_Confirm struct {}
 func (Master_Confirm) Generate(sm *StateMachine) Respond {
 	master := sm.db.FormMaster(sm.user)
-	text := fmt.Sprintf("%s %s \n%d \n%d:00-%d:00 \nУслуги: \n", master.Name, master.Forename, master.Phone, master.Start, master.End)
+	text := fmt.Sprintf("%s %s \n%d \n%d:00-%d:00 \nАдрес:%s \nУслуги: \n", master.Name, master.Forename, master.Phone, master.Start, master.End, master.Address)
 	for _,s := range master.Services {
 		text += s+"\n"
 	}

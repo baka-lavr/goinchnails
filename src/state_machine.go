@@ -6,9 +6,24 @@ import (
 	"reflect"
 	"strings"
 	"strconv"
+	"unicode"
 	"github.com/baka-lavr/goinchnails/src/database"
 	"github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
+
+///
+func CheckText(text string) bool {
+	if text == "" {
+		return false
+	}
+	for _, s := range text {
+        if !unicode.IsLetter(s) {
+            return false
+        }
+    }
+    return true
+}
+///
 
 type StateMachine struct {
 	db db.DataBase
@@ -54,7 +69,6 @@ func InitMachine(db db.DataBase, notice chan db.Notifier) (StateMachine) {
 	return sm
 }
 
-
 func (sm *StateMachine) ChangeState(state string) {
 	sm.state = state
 	sm.db.SetState(sm.user, state)
@@ -73,6 +87,9 @@ func (sm *StateMachine) ExecAction() (string, error) {
 		return "", nil
 	}
 	if res,ok := sm.states[sm.state].(Contactable); ok {
+		if sm.update.Message == nil || sm.update.Message.Contact == nil {
+			return "Используй кнопку, мудила", errors.New("Message not found")
+		}
 		res.Contact(sm, sm.update.Message.Contact.PhoneNumber)
 		return "", nil
 	}
@@ -118,13 +135,14 @@ func (sm *StateMachine) GenKeyboard(msg *tgbotapi.MessageConfig) {
 	resp := sm.states[sm.state].Generate(sm)
 	msg.Text = resp.text
 	if _,ok := sm.states[sm.state].(Readable); ok {
-		msg.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
+		//msg.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
 		return
 	}
 	if _,ok := sm.states[sm.state].(Contactable); ok {
-		msg.ReplyMarkup = tgbotapi.NewReplyKeyboard(tgbotapi.NewKeyboardButtonRow(tgbotapi.NewKeyboardButtonContact("Телефон"),),)
+		msg.ReplyMarkup = tgbotapi.NewOneTimeReplyKeyboard(tgbotapi.NewKeyboardButtonRow(tgbotapi.NewKeyboardButtonContact("Телефон"),),)
 		return
 	}
+	//msg.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
 	var keys [][]tgbotapi.InlineKeyboardButton
 	var row []tgbotapi.InlineKeyboardButton
 	for _,s := range resp.actions {

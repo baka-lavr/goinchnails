@@ -58,7 +58,7 @@ func (db DataBase) MasterDays(user string) []List {
 	ctx := context.Background()
 	id := db.Client.HGet(ctx, "user:"+user, "master").Val()
 	var list []List
-	days := db.Client.SMembers(ctx,"master-days:"+id).Val()
+	days := db.Client.ZRange(ctx,"master-days:"+id,0,-1).Val()
 	for _,s := range days {
 		//s := val_loop.Type().Field(i).Name
 		item := List{s,s,s}
@@ -72,23 +72,18 @@ func (db DataBase) MasterFree(user string) []List {
 	day := db.Client.HGet(ctx, "user:"+user, "day").Val()
 	master := db.Client.HGet(ctx, "user:"+user, "master").Val()
 	m := db.GetMaster(master)
-	time := make(map[int]bool)
-	for i := m.Start; i<m.End; i++ {
-		time[i] = true
-	}
+	ban := make(map[int]bool)
 	all := db.Client.SMembers(ctx,"master-entry:"+master).Val()
 	for _,s := range all {
 		if d := db.Client.HGet(ctx, "entry:"+s, "day").Val(); d != day {
-			log.Println(d)
-			continue}
-		e_time, _ := strconv.Atoi(db.Client.HGet(ctx, "entry:"+s, "time").Val())
-		delete(time, e_time)
-	}
-	if len(time) == 0 {
-		return nil
+			continue
+		}
+		e_time,_ := db.Client.HGet(ctx, "entry:"+s, "time").Int()
+		ban[e_time]=true
 	}
 	var list []List
-	for i,_ := range time {
+	for i:=m.Start; i<m.End; i++ {
+		if ban[i] {continue}
 		str := strconv.Itoa(i)
 		val := List{str, str, str+":00"}
 		list = append(list, val)
@@ -169,9 +164,10 @@ func (db DataBase) DeleteMaster(user string) {
 		for _,s := range db.ListOfType() {
 			_,err = pipe.SRem(ctx, "masters:"+s.Name, id).Result()
 		}
-		for _,s := range db.ListOfDays() {
-			_ = pipe.SRem(ctx, "master-days:"+id, s.Name)
-		}
+		_ = pipe.Del(ctx, "master-days:"+id)
+		//for _,s := range db.ListOfDays() {
+		//	_ = pipe.ZRem(ctx, "master-days:"+id, s.Name)
+		//}
 		return err
 	})
 	log.Println(res)
@@ -195,8 +191,8 @@ func (db DataBase) CreateMaster(user string) error {
 		for _,s := range master.Services {
 			_,err = pipe.SAdd(ctx, "masters:"+s, id).Result()
 		}
-		for _,s := range master.Days {
-			_ = pipe.SAdd(ctx, "master-days:"+id, s)
+		for i,s := range master.Days {
+			_ = pipe.ZAdd(ctx, "master-days:"+id, redis.Z{float64(i), s,})
 		}
 		return err
 	})
