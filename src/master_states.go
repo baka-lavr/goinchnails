@@ -7,7 +7,9 @@ import (
 	"log"
 )
 
-type Master_Start struct {}
+type Master_Start struct {
+	Selector
+}
 func (Master_Start) Generate(sm *StateMachine) Respond {
 	res := NewRespond("Выберите операцию")
 	master := sm.db.GetMaster(sm.user)
@@ -32,10 +34,13 @@ func (Master_Start) Deletion(sm *StateMachine) {
 	sm.ChangeState("Master_Stop")
 }
 func (Master_Start) Canceling(sm *StateMachine) {
+	sm.db.CleanUser(sm.user)
 	sm.ChangeState("Start")
 }
 
-type Master_Type struct {}
+type Master_Type struct {
+	Selector
+}
 func (Master_Type) Generate(sm *StateMachine) Respond {
 	list, let := sm.db.SelectedList(sm.user, sm.db.ListOfType())
 	res := NewRespondList("",list)
@@ -47,7 +52,6 @@ func (Master_Type) Generate(sm *StateMachine) Respond {
 	return res
 }
 func (Master_Type) Switching(sm *StateMachine, sel string) {
-	sm.edit = true
 	sm.db.SwitchTypes(sm.user, sel)
 }
 func (Master_Type) Continue(sm *StateMachine) {
@@ -60,7 +64,9 @@ func (Master_Type) Canceling(sm *StateMachine) {
 	sm.ChangeState("Master_Start")
 }
 
-type Master_Days struct {}
+type Master_Days struct {
+	Selector
+}
 func (Master_Days) Generate(sm *StateMachine) Respond {
 	list, let := sm.db.SelectedList(sm.user, sm.db.ListOfDays())
 	res := NewRespondList("",list)
@@ -72,7 +78,6 @@ func (Master_Days) Generate(sm *StateMachine) Respond {
 	return res
 }
 func (Master_Days) Switching(sm *StateMachine, sel string) {
-	sm.edit = true
 	sm.db.SwitchTypes(sm.user, sel)
 }
 func (Master_Days) Continue(sm *StateMachine) {
@@ -85,7 +90,9 @@ func (Master_Days) Canceling(sm *StateMachine) {
 	sm.ChangeState("Master_Start")
 }
 
-type Master_Time struct {}
+type Master_Time struct {
+	Selector
+}
 func (Master_Time) Generate(sm *StateMachine) Respond {
 	list := sm.db.ListOfHours("")
 	list = list[:len(list)-1]
@@ -102,7 +109,9 @@ func (Master_Time) Canceling(sm *StateMachine) {
 	sm.ChangeState("Master_Start")
 }
 
-type Master_Time_End struct {}
+type Master_Time_End struct {
+	Selector
+}
 func (Master_Time_End) Generate(sm *StateMachine) Respond {
 	list := sm.db.ListOfHours(sm.user)
 	res := NewRespondList("Выберите конец рабочего дня", list)
@@ -118,13 +127,15 @@ func (Master_Time_End) Canceling(sm *StateMachine) {
 	sm.ChangeState("Master_Start")
 }
 
-type Master_Name struct {}
+type Master_Name struct {
+	Reader
+}
 func (Master_Name) Generate(sm *StateMachine) Respond {
 	res := NewRespond("Введите имя")
 	res.AddAction("Клиент","Read")
 	return res
 }
-func (Master_Name) Read(sm *StateMachine, text string) string {
+func (Master_Name) Special(sm *StateMachine, text string) string {
 	if !CheckText(text) {
 		return "Неверный текст"
 	}
@@ -133,13 +144,15 @@ func (Master_Name) Read(sm *StateMachine, text string) string {
 	return ""
 }
 
-type Master_Forename struct {}
+type Master_Forename struct {
+	Reader
+}
 func (Master_Forename) Generate(sm *StateMachine) Respond {
 	res := NewRespond("Введите фамилию")
 	res.AddAction("Клиент","Read")
 	return res
 }
-func (Master_Forename) Read(sm *StateMachine, text string) string {
+func (Master_Forename) Special(sm *StateMachine, text string) string {
 	if !CheckText(text) {
 		return "Неверный текст"
 	}
@@ -148,13 +161,15 @@ func (Master_Forename) Read(sm *StateMachine, text string) string {
 	return ""
 }
 
-type Master_Phone struct {}
+type Master_Phone struct {
+	Contacter
+}
 func (Master_Phone) Generate(sm *StateMachine) Respond {
 	res := NewRespond("Введите номер телефона \nФормат: +7(**********)")
 	//res.AddAction("","Read")
 	return res
 }
-func (Master_Phone) Contact(sm *StateMachine, text string) {
+func (Master_Phone) Special(sm *StateMachine, text string) string {
 	//_, err := strconv.Atoi(text)
 	//if err != nil || len(text) != 10 {
 	//	return "Неверный формат"
@@ -162,23 +177,27 @@ func (Master_Phone) Contact(sm *StateMachine, text string) {
 	log.Println(text)
 	sm.db.EntrySet(sm.user, "phone", text)
 	sm.ChangeState("Master_Address")
-	//return ""
+	return ""
 }
 
-type Master_Address struct {}
+type Master_Address struct {
+	Reader
+}
 func (Master_Address) Generate(sm *StateMachine) Respond {
 	res := NewRespond("Введите адрес")
 	res.AddAction("","Read")
 	return res
 }
-func (Master_Address) Read(sm *StateMachine, text string) string {
+func (Master_Address) Special(sm *StateMachine, text string) string {
 	
 	sm.db.EntrySet(sm.user, "address", text)
 	sm.ChangeState("Master_Confirm")
 	return ""
 }
 
-type Master_Confirm struct {}
+type Master_Confirm struct {
+	Selector
+}
 func (Master_Confirm) Generate(sm *StateMachine) Respond {
 	master := sm.db.FormMaster(sm.user)
 	text := fmt.Sprintf("%s %s \n%d \n%d:00-%d:00 \nАдрес:%s \nУслуги: \n", master.Name, master.Forename, master.Phone, master.Start, master.End, master.Address)
@@ -199,14 +218,18 @@ func (Master_Confirm) Confirmation(sm *StateMachine) string {
 	if err := sm.db.CreateMaster(sm.user); err != nil {
 		text = "Ошибка"
 	}
+	sm.db.CleanUser(sm.user)
 	sm.ChangeState("Start")
 	return text
 }
 func (Master_Confirm) Cancelation(sm *StateMachine) {
+	sm.db.CleanUser(sm.user)
 	sm.ChangeState("Start")
 }
 
-type Master_Check struct {}
+type Master_Check struct {
+	Selector
+}
 func (Master_Check) Generate(sm *StateMachine) Respond {
 	list := sm.db.ListOfEntry(sm.user, true)
 	if len(list) == 0 {
@@ -226,7 +249,9 @@ func (Master_Check) Canceling(sm *StateMachine) {
 	sm.ChangeState("Master_Start")
 }
 
-type Master_Delete struct {}
+type Master_Delete struct {
+	Selector
+}
 func (Master_Delete) Generate(sm *StateMachine) Respond {
 	list := sm.db.ListOfEntry(sm.user, true)
 	if len(list) == 0 {
@@ -252,7 +277,9 @@ func (Master_Delete) Canceling(sm *StateMachine) {
 	sm.ChangeState("Master_Start")
 }
 
-type Master_Stop struct {}
+type Master_Stop struct {
+	Selector
+}
 func (Master_Stop) Generate(sm *StateMachine) Respond {
 	res := NewRespond("Вы точно хотите прекратить работу?")
 	res.AddAction("Подтвердить", "Deletion")
@@ -262,8 +289,75 @@ func (Master_Stop) Generate(sm *StateMachine) Respond {
 func (Master_Stop) Deletion(sm *StateMachine) {
 	sm.db.DeleteMaster(sm.user)
 	sm.db.CleanEntries(sm.user)
-	sm.ChangeState("Master_Start")
+	sm.db.CleanUser(sm.user)
+	sm.ChangeState("Start")
+	
 }
 func (Master_Stop) Canceling(sm *StateMachine) {
 	sm.ChangeState("Master_Start")
+}
+
+type Master_Move struct {
+	Selector
+}
+func (Master_Move) Generate(sm *StateMachine) Respond {
+	list := sm.db.ListOfEntry(sm.user, true)
+	res := NewRespondList("Выберите запись для переноса:\n", list)
+	if len(list) == 0 {
+		res := NewRespond("Записей нет")
+		res.AddAction("Назад", "Canceling")
+		return res
+	}
+	res := NewRespondList("Ваши записи:\n", list)
+	res.AddList("Moving", list)
+	res.AddAction("Назад", "Canceling")
+	return res
+}
+func (Master_Move) Moving(sm *StateMachine, arg string) {
+	sm.db.EntrySet(sm.user, "entry", arg)
+	sm.SetState("Master_Move_Day")
+}
+func (Master_Stop) Canceling(sm *StateMachine) {
+	sm.ChangeState("Master_Start")
+}
+
+type Master_Move_Day struct {
+	Selector
+}
+func (Master_Move_Day) Generate(sm *StateMachine) Respond {
+	list := sm.db.MasterDays(sm.user,true)
+	res := NewRespondList("Рабочие дни мастера:\n", list)
+	res.AddList("SelectingDay",list)
+	res.AddAction("Вернуться","Canceling")
+	return res
+}
+func (Master_Move_Day) SelectingDay(sm *StateMachine, day string) {
+	sm.db.EntrySet(sm.user,"day",day)
+	sm.ChangeState("Master_Move_Time")
+}
+func (Master_Move_Day) Canceling(sm *StateMachine) {
+	sm.ChangeState("Master_Start")
+}
+
+type Master_Move_Time struct{
+	Selector
+}
+func (Master_Move_Time) Generate(sm *StateMachine) Respond {
+	list := sm.db.MasterFree(sm.user,true)
+	if len(list) == 0 {
+		res := NewRespond("Мастер в этот день занят")
+		res.AddAction("Выбрать другой день","Canceling")
+		return res
+	}
+	res := NewRespondList("Свободное время мастера:\n", list)
+	res.AddList("SelectingTime",list)
+	res.AddAction("Выбрать другой день","Canceling")
+	return res
+}
+func (Master_Move_Time) SelectingTime(sm *StateMachine, time string) {
+	sm.db.EntrySet(sm.user,"time",time)
+	sm.ChangeState("Master_Check")
+}
+func (Master_Move_Time) Canceling(sm *StateMachine) {
+	sm.ChangeState("Master_Check")
 }

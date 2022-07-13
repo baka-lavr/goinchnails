@@ -44,7 +44,7 @@ func (db DataBase) FormEntry(user string) Entry {
 
 func (db DataBase) FinishEntry(user string) (*Notifier,error) {
 	ctx := context.Background()
-	free := db.MasterFree(user)
+	free := db.MasterFree(user,false)
 	time := db.Client.HGet(ctx, "user:"+user, "time").Val()
 	for _,s := range free {
 		if s.ID == time {
@@ -123,7 +123,7 @@ func (db DataBase) ListOfEntry(user string, who bool) []List {
 	ctx := context.Background()
 	line := "user"
 	if who {
-		user = "master"
+		line = "master"
 	}
 	all, _ := db.Client.SMembers(ctx,line+"-entry:"+user).Result()
 	var list []List
@@ -142,4 +142,20 @@ func (db DataBase) ListOfEntry(user string, who bool) []List {
 		list = append(list,item)
 	}
 	return list
+}
+
+func (db DataBase) MoveEntry(user string, who bool) (*Notifier,error) {
+	ctx := context.Background()
+	free := db.MasterFree(user, who)
+	entry := db.Client.HGet(ctx, "user:"+user, "entry").Val()
+	day := db.Client.HGet(ctx, "user:"+user, "day").Val()
+	time := db.Client.HGet(ctx, "user:"+user, "time").Val()
+	for _,s := range free {
+		if s.ID == time {
+			err := db.Client.HSet(ctx, "entry:"+entry,"time",time)
+			err := db.Client.HSet(ctx, "entry:"+entry,"day",day)
+			return id,err
+		}
+	}
+	return nil,errors.New("Ошибка")
 }

@@ -54,9 +54,14 @@ func (db DataBase) GetMaster(master string) Master {
 	return value
 }
 
-func (db DataBase) MasterDays(user string) []List {
+func (db DataBase) MasterDays(user string, who bool) []List {
 	ctx := context.Background()
-	id := db.Client.HGet(ctx, "user:"+user, "master").Val()
+	var id string
+	if who {
+		id = user
+	} else {
+		id = db.Client.HGet(ctx, "user:"+user, "master").Val()
+	}
 	var list []List
 	days := db.Client.ZRange(ctx,"master-days:"+id,0,-1).Val()
 	for _,s := range days {
@@ -67,10 +72,15 @@ func (db DataBase) MasterDays(user string) []List {
 	return list
 }
 
-func (db DataBase) MasterFree(user string) []List {
+func (db DataBase) MasterFree(user string, who bool) []List {
 	ctx := context.Background()
 	day := db.Client.HGet(ctx, "user:"+user, "day").Val()
-	master := db.Client.HGet(ctx, "user:"+user, "master").Val()
+	var master string
+	if who {
+		master = user
+	} else {
+		master = db.Client.HGet(ctx, "user:"+user, "master").Val()
+	}
 	m := db.GetMaster(master)
 	ban := make(map[int]bool)
 	all := db.Client.SMembers(ctx,"master-entry:"+master).Val()
@@ -91,27 +101,14 @@ func (db DataBase) MasterFree(user string) []List {
 	return list
 }
 
-func (db DataBase) CurrentTypes(user string) ([]List, bool) {
-	ctx := context.Background()
-	one := false
-	list := db.ListOfType()
-	for i,s := range list {
-		set := db.Client.HGet(ctx, "user:"+user, s.Name).Val()
-		if set == "true" {
-			list[i].Descr += " ВЫБРАНО"
-			one = true
-		}
-	}
-	return list, one
-}
-
 func (db DataBase) SelectedList(user string, list []List) ([]List, bool) {
 	ctx := context.Background()
 	one := false
 	for i,s := range list {
 		set := db.Client.HGet(ctx, "user:"+user, s.Name).Val()
 		if set == "true" {
-			list[i].Descr += " ВЫБРАНО"
+			list[i].Descr += " ✅"
+			list[i].Name += " ✅"
 			one = true
 		}
 	}

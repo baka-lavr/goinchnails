@@ -16,6 +16,7 @@ type UpdateData struct {
 	Chat int64
 	Message *tgbotapi.Message
 	Callback *tgbotapi.CallbackQuery
+	Command bool
 }
 
 
@@ -58,6 +59,7 @@ func (app *Application) UpdateHandle() {
 			data.Message = update.Message
 			data.User = update.Message.From.ID
 			data.Chat = update.Message.Chat.ID
+			data.Command = update.Message.IsCommand()
 		}
 		if update.CallbackQuery != nil {
 			data.Callback = update.CallbackQuery
@@ -69,13 +71,21 @@ func (app *Application) UpdateHandle() {
 		var res tgbotapi.Message
 		var err error
 
+
 		if !app.sm.edit {
 			res, err = app.bot.Send(msg)
 		} else {
-			keys,_ := msg.ReplyMarkup.(*tgbotapi.InlineKeyboardMarkup)
-			edit := tgbotapi.NewEditMessageTextAndMarkup(data.User,app.db.GetLastMessage(app.sm.user),msg.Text,*keys)
+			var edit tgbotapi.EditMessageTextConfig
+			keys,ok := msg.ReplyMarkup.(*tgbotapi.InlineKeyboardMarkup)
+			if ok {
+				edit = tgbotapi.NewEditMessageTextAndMarkup(data.User,app.db.GetLastMessage(app.sm.user),msg.Text,*keys)
+			} else {
+				edit = tgbotapi.NewEditMessageText(data.User,app.db.GetLastMessage(app.sm.user),msg.Text)
+			}
 			res, err = app.bot.Send(edit)
 		}
+
+		log.Println(res.MessageID)
 		app.db.SetLastMessage(data.User, res.MessageID)
 		if err != nil {
 			log.Println(err)
@@ -105,9 +115,6 @@ func (app *Application) Close() {
 
 func main() {
 	app := InitApplication()
-
-	
-
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt)
 	<- sig

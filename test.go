@@ -7,7 +7,9 @@ import (
 	//"encoding/base32"
 	//"strconv"
 )
-type Govno interface {}
+type Govno interface {
+	
+}
 type Foo struct {}
 
 func main() {

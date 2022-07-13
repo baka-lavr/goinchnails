@@ -33,18 +33,15 @@ func InitDB() DataBase {
 	return DataBase{rdb}
 }
 
-func (db DataBase) GetState(user string) (string, error) {
+func (db DataBase) GetState(user string) (string, bool) {
 	ctx := context.Background()
 	//log.Println(user)
 	state := db.Client.HGet(ctx,"user:"+user, "state").Val()
 	if state == "" {
-		_, err := db.Client.HSet(ctx, "user:"+user, "state", "Start").Result()
-		if err != nil {
-			return "", err
-		}
-		return "Start", nil
+		db.Client.HSet(ctx, "user:"+user, "state", "Start")
+		return "Start", true
 	}
-	return state, nil
+	return state, false
 }
 
 func (db DataBase) SetState(user string, state string) error {
@@ -112,4 +109,10 @@ func (db DataBase) SetLastMessage(user int64, msg int) {
 	data_u := strconv.FormatInt(user,10)
 	data_m := strconv.FormatInt(int64(msg),10)
 	db.EntrySet(data_u, "message", data_m)
+}
+
+func (db DataBase) CleanUser(user string) {
+	ctx := context.Background()
+	//data_u := strconv.FormatInt(user,10)
+	db.Client.Del(ctx,"user:"+user)
 }
