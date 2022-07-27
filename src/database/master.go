@@ -53,6 +53,11 @@ func (db DataBase) GetMaster(master string) Master {
 	data.Scan(&value)
 	return value
 }
+func (db DataBase) GetMasterByEntry(entry string) string {
+	ctx := context.Background()
+	value := db.Client.HGet(ctx, "entry:"+entry, "master").Val()
+	return value
+}
 
 func (db DataBase) MasterDays(user string, who bool) []List {
 	ctx := context.Background()
@@ -78,12 +83,22 @@ func (db DataBase) MasterFree(user string, who bool) []List {
 	var master string
 	if who {
 		master = user
+		entry := db.Client.HGet(ctx, "user:"+user, "entry").Val()
+		user = db.Client.HGet(ctx, "entry:"+entry, "client").Val()
 	} else {
 		master = db.Client.HGet(ctx, "user:"+user, "master").Val()
 	}
 	m := db.GetMaster(master)
 	ban := make(map[int]bool)
 	all := db.Client.SMembers(ctx,"master-entry:"+master).Val()
+	for _,s := range all {
+		if d := db.Client.HGet(ctx, "entry:"+s, "day").Val(); d != day {
+			continue
+		}
+		e_time,_ := db.Client.HGet(ctx, "entry:"+s, "time").Int()
+		ban[e_time]=true
+	}
+	all = db.Client.SMembers(ctx,"user-entry:"+user).Val()
 	for _,s := range all {
 		if d := db.Client.HGet(ctx, "entry:"+s, "day").Val(); d != day {
 			continue

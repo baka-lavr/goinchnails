@@ -165,7 +165,7 @@ type Master_Phone struct {
 	Contacter
 }
 func (Master_Phone) Generate(sm *StateMachine) Respond {
-	res := NewRespond("Введите номер телефона \nФормат: +7(**********)")
+	res := NewRespond("Подтвердите номер телефона")
 	//res.AddAction("","Read")
 	return res
 }
@@ -239,8 +239,12 @@ func (Master_Check) Generate(sm *StateMachine) Respond {
 	}
 	res := NewRespondList("Ваши записи:\n", list)
 	res.AddAction("Удалить запись", "ChooseDeletion")
+	res.AddAction("Перенести запись", "ChooseMoving")
 	res.AddAction("Назад", "Canceling")
 	return res
+}
+func (Master_Check) ChooseMoving(sm *StateMachine) {
+	sm.ChangeState("Master_Move")
 }
 func (Master_Check) ChooseDeletion(sm *StateMachine) {
 	sm.ChangeState("Master_Delete")
@@ -302,7 +306,6 @@ type Master_Move struct {
 }
 func (Master_Move) Generate(sm *StateMachine) Respond {
 	list := sm.db.ListOfEntry(sm.user, true)
-	res := NewRespondList("Выберите запись для переноса:\n", list)
 	if len(list) == 0 {
 		res := NewRespond("Записей нет")
 		res.AddAction("Назад", "Canceling")
@@ -315,9 +318,9 @@ func (Master_Move) Generate(sm *StateMachine) Respond {
 }
 func (Master_Move) Moving(sm *StateMachine, arg string) {
 	sm.db.EntrySet(sm.user, "entry", arg)
-	sm.SetState("Master_Move_Day")
+	sm.ChangeState("Master_Move_Day")
 }
-func (Master_Stop) Canceling(sm *StateMachine) {
+func (Master_Move) Canceling(sm *StateMachine) {
 	sm.ChangeState("Master_Start")
 }
 
@@ -336,7 +339,7 @@ func (Master_Move_Day) SelectingDay(sm *StateMachine, day string) {
 	sm.ChangeState("Master_Move_Time")
 }
 func (Master_Move_Day) Canceling(sm *StateMachine) {
-	sm.ChangeState("Master_Start")
+	sm.ChangeState("Master_Check")
 }
 
 type Master_Move_Time struct{
@@ -351,11 +354,14 @@ func (Master_Move_Time) Generate(sm *StateMachine) Respond {
 	}
 	res := NewRespondList("Свободное время мастера:\n", list)
 	res.AddList("SelectingTime",list)
-	res.AddAction("Выбрать другой день","Canceling")
+	res.AddAction("Вернуться","Canceling")
 	return res
 }
 func (Master_Move_Time) SelectingTime(sm *StateMachine, time string) {
 	sm.db.EntrySet(sm.user,"time",time)
+	if not, err := sm.db.MoveEntry(sm.user, true); err == nil {
+		sm.notice<-*not
+	}
 	sm.ChangeState("Master_Check")
 }
 func (Master_Move_Time) Canceling(sm *StateMachine) {

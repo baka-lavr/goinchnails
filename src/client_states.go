@@ -175,8 +175,12 @@ func (Client_Check) Generate(sm *StateMachine) Respond {
 	}
 	res := NewRespondList("Ваши записи:\n", list)
 	res.AddAction("Удалить запись", "ChooseDeletion")
+	res.AddAction("Перенести запись", "ChooseMoving")
 	res.AddAction("Назад", "Canceling")
 	return res
+}
+func (Client_Check) ChooseMoving(sm *StateMachine) {
+	sm.ChangeState("Client_Move")
 }
 func (Client_Check) ChooseDeletion(sm *StateMachine) {
 	sm.ChangeState("Client_Delete")
@@ -211,4 +215,72 @@ func (Client_Delete) Deletion(sm *StateMachine, entry string) string {
 }
 func (Client_Delete) Canceling(sm *StateMachine) {
 	sm.ChangeState("Client_Start")
+}
+
+type Client_Move struct {
+	Selector
+}
+func (Client_Move) Generate(sm *StateMachine) Respond {
+	list := sm.db.ListOfEntry(sm.user, false)
+	if len(list) == 0 {
+		res := NewRespond("Записей нет")
+		res.AddAction("Назад", "Canceling")
+		return res
+	}
+	res := NewRespondList("Ваши записи:\n", list)
+	res.AddList("Moving", list)
+	res.AddAction("Назад", "Canceling")
+	return res
+}
+func (Client_Move) Moving(sm *StateMachine, arg string) {
+	sm.db.EntrySet(sm.user, "entry", arg)
+	sm.db.EntrySet(sm.user, "master", sm.db.GetMasterByEntry(arg))
+	sm.ChangeState("Client_Move_Day")
+}
+func (Client_Move) Canceling(sm *StateMachine) {
+	sm.ChangeState("Client_Start")
+}
+
+type Client_Move_Day struct {
+	Selector
+}
+func (Client_Move_Day) Generate(sm *StateMachine) Respond {
+	list := sm.db.MasterDays(sm.user,false)
+	res := NewRespondList("Рабочие дни мастера:\n", list)
+	res.AddList("SelectingDay",list)
+	res.AddAction("Вернуться","Canceling")
+	return res
+}
+func (Client_Move_Day) SelectingDay(sm *StateMachine, day string) {
+	sm.db.EntrySet(sm.user,"day",day)
+	sm.ChangeState("Client_Move_Time")
+}
+func (Client_Move_Day) Canceling(sm *StateMachine) {
+	sm.ChangeState("Client_Check")
+}
+
+type Client_Move_Time struct{
+	Selector
+}
+func (Client_Move_Time) Generate(sm *StateMachine) Respond {
+	list := sm.db.MasterFree(sm.user,false)
+	if len(list) == 0 {
+		res := NewRespond("Мастер в этот день занят")
+		res.AddAction("Выбрать другой день","Canceling")
+		return res
+	}
+	res := NewRespondList("Свободное время мастера:\n", list)
+	res.AddList("SelectingTime",list)
+	res.AddAction("Вернуться","Canceling")
+	return res
+}
+func (Client_Move_Time) SelectingTime(sm *StateMachine, time string) {
+	sm.db.EntrySet(sm.user,"time",time)
+	if not, err := sm.db.MoveEntry(sm.user, false); err == nil {
+		sm.notice<-*not
+	}
+	sm.ChangeState("Client_Check")
+}
+func (Client_Move_Time) Canceling(sm *StateMachine) {
+	sm.ChangeState("Client_Check")
 }

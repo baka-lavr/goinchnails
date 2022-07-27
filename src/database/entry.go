@@ -150,11 +150,18 @@ func (db DataBase) MoveEntry(user string, who bool) (*Notifier,error) {
 	entry := db.Client.HGet(ctx, "user:"+user, "entry").Val()
 	day := db.Client.HGet(ctx, "user:"+user, "day").Val()
 	time := db.Client.HGet(ctx, "user:"+user, "time").Val()
+	var id int
+	if who {
+		id,_ = db.Client.HGet(ctx, "entry:"+entry,"client").Int()
+	} else {
+		id,_ = db.Client.HGet(ctx, "entry:"+entry,"master").Int()
+	}
 	for _,s := range free {
 		if s.ID == time {
-			err := db.Client.HSet(ctx, "entry:"+entry,"time",time)
-			err := db.Client.HSet(ctx, "entry:"+entry,"day",day)
-			return id,err
+			err := db.Client.HSet(ctx, "entry:"+entry,"time",time).Err()
+			err = db.Client.HSet(ctx, "entry:"+entry,"day",day).Err()
+			not := Notifier{int64(id),fmt.Sprintf("Запись перенесена на %s:00 в %s",time,day),}
+			return &not,err
 		}
 	}
 	return nil,errors.New("Ошибка")
